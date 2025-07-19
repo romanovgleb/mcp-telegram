@@ -1,0 +1,56 @@
+{
+  "description": "Example MCP configuration for Telegram server",
+  "claude_desktop_config": {
+    "mcpServers": {
+      "telegram": {
+        "command": "fastmcp",
+        "args": ["run", "telegram_mcp_server.py"],
+        "env": {
+          "TELEGRAM_BOT_TOKEN": "your_bot_token_here",
+          "TELEGRAM_CHAT_ID": "your_chat_id_here"
+        }
+      }
+    }
+  },
+  "alternative_config_python": {
+    "mcpServers": {
+      "telegram": {
+        "command": "python",
+        "args": ["telegram_mcp_server.py"],
+        "env": {
+          "TELEGRAM_BOT_TOKEN": "your_bot_token_here", 
+          "TELEGRAM_CHAT_ID": "your_chat_id_here"
+        }
+      }
+    }
+  },
+  "environment_variables": {
+    "TELEGRAM_BOT_TOKEN": {
+      "description": "Bot token from @BotFather",
+      "example": "123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ",
+      "required": true
+    },
+    "TELEGRAM_CHAT_ID": {
+      "description": "Your Telegram chat ID",
+      "example": "123456789",
+      "required": true
+    },
+    "LOG_LEVEL": {
+      "description": "Logging level (DEBUG, INFO, WARNING, ERROR)",
+      "example": "INFO",
+      "required": false
+    }
+  },
+  "setup_instructions": [
+    "1. Get bot token from @BotFather on Telegram",
+    "2. Find your chat ID by messaging the bot and visiting https://api.telegram.org/bot<TOKEN>/getUpdates",
+    "3. Replace the values in the config above",
+    "4. Add the config to your Claude Desktop configuration file",
+    "5. Restart Claude Desktop"
+  ],
+  "fastmcp_installation": {
+    "command": "fastmcp install telegram_mcp_server.py",
+    "with_env": "fastmcp install telegram_mcp_server.py -e TELEGRAM_BOT_TOKEN=your_token -e TELEGRAM_CHAT_ID=your_chat_id",
+    "development": "fastmcp dev telegram_mcp_server.py"
+  }
+} 

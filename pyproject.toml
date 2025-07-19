@@ -1,0 +1,65 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "telegram-mcp"
+version = "0.1.0"
+description = "A Model Context Protocol server for sending Telegram messages"
+readme = "README.md"
+requires-python = ">=3.8"
+authors = [
+    {name = "MCP Telegram Server", email = "telegram@mcp.dev"}
+]
+keywords = ["mcp", "telegram", "messaging", "bot", "api"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+    "fastmcp>=2.0.0",
+    "requests>=2.25.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=22.0.0",
+    "isort>=5.0.0",
+    "mypy>=1.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/your-username/telegram-mcp"
+Repository = "https://github.com/your-username/telegram-mcp.git"
+Issues = "https://github.com/your-username/telegram-mcp/issues"
+
+[project.scripts]
+telegram-mcp = "telegram_mcp_server:main"
+
+[tool.setuptools]
+py-modules = ["telegram_mcp_server"]
+
+[tool.black]
+line-length = 100
+target-version = ['py38']
+include = '\.pyi?$'
+
+[tool.isort]
+profile = "black"
+line_length = 100
+
+[tool.mypy]
+python_version = "3.8"
+strict = true
+warn_return_any = true
+warn_unused_configs = true 
