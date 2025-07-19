@@ -44,10 +44,10 @@ def send_telegram_message(
     bot_token = bot_token or os.getenv("TELEGRAM_BOT_TOKEN")
     
     if not chat_id:
-        return "❌ Error: chat_id is required. Provide it as parameter or set TELEGRAM_CHAT_ID environment variable."
+        return "Error: chat_id is required. Provide it as parameter or set TELEGRAM_CHAT_ID environment variable."
     
     if not bot_token:
-        return "❌ Error: bot_token is required. Provide it as parameter or set TELEGRAM_BOT_TOKEN environment variable."
+        return "Error: bot_token is required. Provide it as parameter or set TELEGRAM_BOT_TOKEN environment variable."
     
     try:
         # URL encode the message to handle special characters
@@ -64,21 +64,21 @@ def send_telegram_message(
             response_data = response.json()
             if response_data.get("ok"):
                 logger.info(f"Message sent successfully to chat {chat_id}")
-                return f"✅ Message sent successfully to Telegram chat {chat_id}\nMessage: {message}"
+                return f"Message sent successfully to Telegram chat {chat_id}\nMessage: {message}"
             else:
                 error_description = response_data.get("description", "Unknown error")
                 logger.error(f"Telegram API error: {error_description}")
-                return f"❌ Telegram API error: {error_description}"
+                return f"Telegram API error: {error_description}"
         else:
             logger.error(f"HTTP error: {response.status_code}")
-            return f"❌ HTTP error: {response.status_code} - {response.text}"
+            return f"HTTP error: {response.status_code} - {response.text}"
             
     except requests.exceptions.RequestException as e:
         logger.error(f"Request failed: {e}")
-        return f"❌ Request failed: {str(e)}"
+        return f"Request failed: {str(e)}"
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
-        return f"❌ Unexpected error: {str(e)}"
+        return f"Unexpected error: {str(e)}"
 
 
 if __name__ == "__main__":

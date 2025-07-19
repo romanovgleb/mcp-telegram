@@ -1,6 +1,6 @@
 {
   "description": "Example MCP configuration for Telegram server",
-  "claude_desktop_config": {
+  "cursor_config": {
     "mcpServers": {
       "telegram": {
         "command": "fastmcp",
@@ -45,8 +45,8 @@
     "1. Get bot token from @BotFather on Telegram",
     "2. Find your chat ID by messaging the bot and visiting https://api.telegram.org/bot<TOKEN>/getUpdates",
     "3. Replace the values in the config above",
-    "4. Add the config to your Claude Desktop configuration file",
-    "5. Restart Claude Desktop"
+    "4. Add the config to your MCP client configuration file",
+    "5. Restart your MCP client"
   ],
   "fastmcp_installation": {
     "command": "fastmcp install telegram_mcp_server.py",

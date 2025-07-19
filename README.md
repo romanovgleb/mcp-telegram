@@ -1,14 +1,14 @@
 # Telegram MCP Server
 
-A Model Context Protocol (MCP) server that enables AI assistants to send messages via Telegram Bot API using simple HTTP GET requests.
+A Model Context Protocol server for sending messages through Telegram Bot API using HTTP GET requests.
 
 ## Features
 
-- 🚀 **Simple messaging**: Send Telegram messages with a single tool call
-- 🔒 **Secure**: Uses environment variables for credentials (no hardcoded tokens)
-- ⚡ **Fast**: Built with FastMCP for optimal performance
-- 🛠️ **Flexible**: Support for custom chat IDs and bot tokens per message
-- 📝 **Easy setup**: Quick installation and configuration
+- Send Telegram messages with a single tool call
+- Uses environment variables for credentials (no hardcoded tokens)
+- Built with FastMCP for optimal performance
+- Support for custom chat IDs and bot tokens per message
+- Quick installation and configuration
 
 ## Installation
 
@@ -61,25 +61,33 @@ export TELEGRAM_CHAT_ID="your_chat_id_here"
 # Development mode with MCP Inspector
 fastmcp dev telegram_mcp_server.py
 
-# Install in Claude Desktop
-fastmcp install telegram_mcp_server.py
-
 # Or run directly
 python telegram_mcp_server.py
 ```
 
-### Using with Claude Desktop
+### Using with Cursor
 
-1. Install the server:
-   ```bash
-   fastmcp install telegram_mcp_server.py -e TELEGRAM_BOT_TOKEN=your_token -e TELEGRAM_CHAT_ID=your_chat_id
+1. Add the server to your Cursor MCP configuration file (`~/.cursor/mcp.json`):
+   ```json
+   {
+     "mcpServers": {
+       "telegram": {
+         "command": "/path/to/your/python",
+         "args": ["/path/to/telegram_mcp_server.py"],
+         "env": {
+           "TELEGRAM_BOT_TOKEN": "your_bot_token_here",
+           "TELEGRAM_CHAT_ID": "your_chat_id_here"
+         }
+       }
+     }
+   }
    ```
 
-2. The server will be available in Claude Desktop as "Telegram Messenger"
+2. Restart Cursor to load the new configuration
 
 3. Use it in your conversations:
-   - "Send a Telegram message saying 'Hello from Claude!'"
-   - "Notify me on Telegram that the task is complete"
+   - "Send a Telegram message saying 'Hello from Cursor!'"
+   - "Notify me on Telegram when the analysis is complete"
 
 ### Tool: send_telegram_message
 
@@ -108,7 +116,7 @@ send_telegram_message(
 
 ### MCP Client Configuration
 
-Add to your Claude Desktop configuration:
+For MCP clients that support the FastMCP command:
 
 ```json
 {
@@ -116,6 +124,23 @@ Add to your Claude Desktop configuration:
     "telegram": {
       "command": "fastmcp",
       "args": ["run", "telegram_mcp_server.py"],
+      "env": {
+        "TELEGRAM_BOT_TOKEN": "your_bot_token_here",
+        "TELEGRAM_CHAT_ID": "your_chat_id_here"
+      }
+    }
+  }
+}
+```
+
+For direct Python execution (recommended for Cursor):
+
+```json
+{
+  "mcpServers": {
+    "telegram": {
+      "command": "python",
+      "args": ["telegram_mcp_server.py"],
       "env": {
         "TELEGRAM_BOT_TOKEN": "your_bot_token_here",
         "TELEGRAM_CHAT_ID": "your_chat_id_here"
@@ -158,18 +183,17 @@ Test your server using the MCP Inspector:
 # Start development server
 fastmcp dev telegram_mcp_server.py
 
-# Open http://localhost:3000 in your browser
-# Test the send_telegram_message tool
+# Open http://localhost:3000 in your browser to test the send_telegram_message tool
 ```
 
 ### Error Handling
 
-The server provides detailed error messages:
+The server provides detailed error messages for common issues:
 
-- ❌ Missing credentials (bot token or chat ID)
-- ❌ Telegram API errors (invalid token, chat not found, etc.)
-- ❌ Network connectivity issues
-- ❌ Invalid message format
+- Missing credentials (bot token or chat ID)
+- Telegram API errors (invalid token, chat not found, etc.)
+- Network connectivity issues
+- Invalid message format
 
 ## Security Notes
 
@@ -233,9 +257,9 @@ MIT License - see LICENSE file for details.
 
 ## Support
 
-- 📖 [Model Context Protocol Documentation](https://modelcontextprotocol.io/)
-- 🤖 [Telegram Bot API](https://core.telegram.org/bots/api)
-- 🚀 [FastMCP Documentation](https://github.com/jlowin/fastmcp)
+- [Model Context Protocol Documentation](https://modelcontextprotocol.io/)
+- [Telegram Bot API](https://core.telegram.org/bots/api)
+- [FastMCP Documentation](https://github.com/jlowin/fastmcp)
 
 ## Changelog
 
