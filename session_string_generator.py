@@ -62,36 +62,66 @@ try:
         print("\nAuthentication successful!")
         print("\n----- Your Session String -----")
         print(f"\n{session_string}\n")
+        
+        # Determine the session variable name
+        session_var_name = "TELEGRAM_SESSION_STRING"
+        try:
+            # Check if .env file exists and find the next available session number
+            if os.path.exists(".env"):
+                with open(".env", "r") as file:
+                    env_contents = file.readlines()
+                
+                # Find the highest session number
+                max_session_num = 0
+                for line in env_contents:
+                    if line.startswith("TELEGRAM_SESSION_STRING="):
+                        max_session_num = max(max_session_num, 1)
+                    elif line.startswith("TELEGRAM_SESSION_STRING_"):
+                        try:
+                            num = int(line.split("_")[3].split("=")[0])
+                            max_session_num = max(max_session_num, num)
+                        except (ValueError, IndexError):
+                            pass
+                
+                # If base session exists, use next number
+                if max_session_num > 0:
+                    session_var_name = f"TELEGRAM_SESSION_STRING_{max_session_num + 1}"
+        except Exception:
+            pass  # Fall back to base session name
+        
         print("Add this to your .env file as:")
-        print(f"TELEGRAM_SESSION_STRING={session_string}")
+        print(f"{session_var_name}={session_string}")
         print("\nIMPORTANT: Keep this string private and never share it with anyone!")
+        print("\nNote: Multiple session strings allow you to use Telegram MCP in multiple Cursor windows simultaneously.")
 
         # Optional: auto-update the .env file
         choice = input(
-            "\nWould you like to automatically update your .env file with this session string? (y/N): "
+            f"\nWould you like to automatically add this session string to your .env file as {session_var_name}? (y/N): "
         )
         if choice.lower() == "y":
             try:
                 # Read the current .env file
-                with open(".env", "r") as file:
-                    env_contents = file.readlines()
-
-                # Update or add the SESSION_STRING line
+                env_contents = []
+                if os.path.exists(".env"):
+                    with open(".env", "r") as file:
+                        env_contents = file.readlines()
+                
+                # Check if this session variable already exists
                 session_string_line_found = False
                 for i, line in enumerate(env_contents):
-                    if line.startswith("TELEGRAM_SESSION_STRING="):
-                        env_contents[i] = f"TELEGRAM_SESSION_STRING={session_string}\n"
+                    if line.startswith(f"{session_var_name}="):
+                        env_contents[i] = f"{session_var_name}={session_string}\n"
                         session_string_line_found = True
                         break
 
                 if not session_string_line_found:
-                    env_contents.append(f"TELEGRAM_SESSION_STRING={session_string}\n")
+                    env_contents.append(f"{session_var_name}={session_string}\n")
 
                 # Write back to the .env file
                 with open(".env", "w") as file:
                     file.writelines(env_contents)
 
-                print("\n.env file updated successfully!")
+                print(f"\n.env file updated successfully! Session added as {session_var_name}")
             except Exception as e:
                 print(f"\nError updating .env file: {e}")
                 print("Please manually add the session string to your .env file.")

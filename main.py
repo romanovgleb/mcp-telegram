@@ -6,6 +6,7 @@ import asyncio
 import sqlite3
 import logging
 import mimetypes
+import fcntl
 from datetime import datetime, timedelta
 from enum import Enum
 from typing import List, Dict, Optional, Union, Any
@@ -59,17 +60,28 @@ TELEGRAM_API_ID = int(os.getenv("TELEGRAM_API_ID"))
 TELEGRAM_API_HASH = os.getenv("TELEGRAM_API_HASH")
 TELEGRAM_SESSION_NAME = os.getenv("TELEGRAM_SESSION_NAME")
 
-# Check if a string session exists in environment, otherwise use file-based session
-SESSION_STRING = os.getenv("TELEGRAM_SESSION_STRING")
+# Collect all available session strings from environment
+# Support TELEGRAM_SESSION_STRING, TELEGRAM_SESSION_STRING_2, TELEGRAM_SESSION_STRING_3, etc.
+SESSION_STRINGS = []
+# First, add the base session string if it exists
+base_session = os.getenv("TELEGRAM_SESSION_STRING")
+if base_session:
+    SESSION_STRINGS.append(base_session)
+# Then, add numbered session strings (TELEGRAM_SESSION_STRING_2, TELEGRAM_SESSION_STRING_3, etc.)
+session_num = 2
+while True:
+    session_key = f"TELEGRAM_SESSION_STRING_{session_num}"
+    session_value = os.getenv(session_key)
+    if session_value:
+        SESSION_STRINGS.append(session_value)
+        session_num += 1
+    else:
+        break
 
 mcp = FastMCP("telegram")
 
-if SESSION_STRING:
-    # Use the string session if available
-    client = TelegramClient(StringSession(SESSION_STRING), TELEGRAM_API_ID, TELEGRAM_API_HASH)
-else:
-    # Use file-based session
-    client = TelegramClient(TELEGRAM_SESSION_NAME, TELEGRAM_API_ID, TELEGRAM_API_HASH)
+# Client will be initialized dynamically during startup
+client = None
 
 # Setup robust logging with both file and console output
 logger = logging.getLogger("telegram_mcp")
@@ -104,7 +116,7 @@ try:
     logger.addHandler(file_handler)
     logger.info(f"Logging initialized to {log_file_path}")
 except Exception as log_error:
-    print(f"WARNING: Error setting up log file: {log_error}")
+    logger.error(f"WARNING: Error setting up log file: {log_error}")
     # Fallback to console-only logging
     logger.addHandler(console_handler)
     logger.error(f"Failed to set up log file handler: {log_error}")
@@ -201,6 +213,9 @@ def validate_id(*param_names_to_validate):
 
                     # Handle string IDs
                     if isinstance(value, str):
+                        # Special aliases for Saved Messages
+                        if value.lower() in ("me", "self"):
+                            return value.lower(), None
                         try:
                             int_value = int(value)
                             if not (-(2**63) <= int_value <= 2**63 - 1):
@@ -315,6 +330,119 @@ def get_sender_name(message) -> str:
     else:
         return "Unknown"
 
+
+@mcp.tool()
+@validate_id("chat_id")
+async def schedule_message(chat_id: Union[int, str], text: str, schedule_iso: str) -> str:
+    """
+    Schedule a message to be sent at a specific datetime.
+    Args:
+        chat_id: The ID or username of the chat.
+        text: The message content to send.
+        schedule_iso: ISO 8601 datetime string, e.g. "2025-10-28T09:55:00+03:00".
+    """
+    try:
+        entity = await client.get_entity(chat_id)
+
+        # Parse schedule time
+        try:
+            schedule_dt = datetime.fromisoformat(schedule_iso.replace("Z", "+00:00"))
+        except ValueError:
+            return (
+                "Invalid schedule_iso format. Use ISO 8601, e.g. 2025-10-28T09:55:00+03:00"
+            )
+
+        # Telethon will schedule the message server-side
+        msg = await client.send_message(entity, text, schedule=schedule_dt)
+        return json.dumps({"status": "scheduled", "id": msg.id, "date": msg.date.isoformat()}, default=json_serializer)
+    except Exception as e:
+        return log_and_format_error("schedule_message", e, chat_id=chat_id, schedule_iso=schedule_iso)
+
+
+@mcp.tool()
+@validate_id("chat_id")
+async def list_scheduled_messages(chat_id: Union[int, str]) -> str:
+    """
+    List scheduled (not yet sent) messages for a chat.
+    Args:
+        chat_id: The ID or username of the chat.
+        limit: Max number of scheduled messages to show.
+    """
+    try:
+        # Strict resolution (ID or username). If direct fails for numeric IDs, fallback to exact ID match from dialogs.
+        try:
+            entity = await client.get_entity(chat_id)
+        except Exception:
+            entity = None
+            # Numeric-ID exact match fallback via dialogs
+            try:
+                numeric_id = int(chat_id)
+            except Exception:
+                numeric_id = None
+            if numeric_id is not None:
+                dialogs = await client.get_dialogs()
+                for d in dialogs:
+                    if getattr(d.entity, "id", None) == numeric_id:
+                        entity = d.entity
+                        break
+            if entity is None:
+                return f"Chat '{chat_id}' not found."
+        
+        # Use low-level API which returns all scheduled messages reliably
+        from telethon.tl.types import InputPeerSelf
+        use_self = False
+        if isinstance(chat_id, str) and chat_id.lower() in ("me", "self"):
+            use_self = True
+        elif getattr(entity, "is_self", False):
+            use_self = True
+
+        peer = InputPeerSelf() if use_self else entity
+
+        logger.info("list_scheduled_messages: fetching", extra={"chat_id": chat_id, "entity_id": getattr(entity, "id", None), "entity_class": type(entity).__name__, "use_self": use_self})
+
+        result = await client(functions.messages.GetScheduledHistoryRequest(peer=peer, hash=0))
+        msgs = getattr(result, "messages", []) or []
+
+        logger.info(
+            "list_scheduled_messages: fetched",
+            extra={
+                "count": len(msgs),
+                "ids": [getattr(m, "id", None) for m in msgs],
+            },
+        )
+
+        if not msgs:
+            return "No scheduled messages."
+
+        msgs = sorted(msgs, key=lambda m: m.date or datetime.min)
+        lines = []
+        for m in msgs:
+            text = (getattr(m, "message", "") or "").strip()
+            when = m.date.isoformat() if getattr(m, "date", None) else ""
+            lines.append(f"ID: {m.id} | Date: {when} | Message: {text}")
+        return "\n".join(lines)
+    except Exception as e:
+        return log_and_format_error("list_scheduled_messages", e, chat_id=chat_id)
+
+
+@mcp.tool()
+@validate_id("chat_id")
+async def cancel_scheduled_message(chat_id: Union[int, str], message_id: int) -> str:
+    """
+    Cancel a scheduled message by ID in a chat.
+    Args:
+        chat_id: The ID or username of the chat.
+        message_id: The scheduled message ID to cancel.
+    """
+    try:
+        entity = await client.get_entity(chat_id)
+        await client(functions.messages.DeleteScheduledMessagesRequest(peer=entity, id=[message_id]))
+        return "Scheduled message cancelled."
+    except Exception as e:
+        return log_and_format_error("cancel_scheduled_message", e, chat_id=chat_id, message_id=message_id)
+
+
+ 
 
 @mcp.tool()
 async def get_chats(page: int = 1, page_size: int = 20) -> str:
@@ -2872,22 +3000,130 @@ async def create_poll(
 if __name__ == "__main__":
     nest_asyncio.apply()
 
-    async def main() -> None:
-        try:
-            # Start the Telethon client non-interactively
-            print("Starting Telegram client...")
-            await client.start()
+    # Try to acquire lock file to detect multiple instances (warning only, not blocking)
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    lock_file_path = os.path.join(script_dir, ".telegram_mcp.lock")
+    lock_file = None
+    lock_acquired = False
 
-            print("Telegram client started. Running MCP server...")
+    try:
+        # Try to acquire exclusive lock (non-blocking)
+        lock_file = open(lock_file_path, "w")
+        try:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            # Write PID to lock file
+            lock_file.write(str(os.getpid()))
+            lock_file.flush()
+            lock_acquired = True
+        except IOError:
+            # Lock is held by another process - warn but continue
+            lock_file.close()
+            lock_file = None
+            logger.warning(
+                "Another instance of Telegram MCP server may be running. "
+                "Multiple instances using the same Telegram session may cause AuthKeyDuplicatedError. "
+                "Consider using different sessions for different Cursor windows."
+            )
+    except Exception as lock_error:
+        if lock_file:
+            lock_file.close()
+            lock_file = None
+        logger.warning(f"Could not check for other instances: {lock_error}")
+
+    async def main() -> None:
+        global client
+        client = None
+        used_session_index = None
+        
+        # Try to connect using available sessions
+        if SESSION_STRINGS:
+            # Try each session string until we find one that works
+            for idx, session_string in enumerate(SESSION_STRINGS):
+                try:
+                    logger.info(f"Trying to connect with session {idx + 1}/{len(SESSION_STRINGS)}...")
+                    temp_client = TelegramClient(
+                        StringSession(session_string), TELEGRAM_API_ID, TELEGRAM_API_HASH
+                    )
+                    await temp_client.start()
+                    # If we got here, connection succeeded
+                    client = temp_client
+                    used_session_index = idx
+                    logger.info(f"Successfully connected using session {idx + 1}")
+                    break
+                except telethon.errors.rpcerrorlist.AuthKeyDuplicatedError:
+                    # This session is already in use, try next one
+                    logger.warning(f"Session {idx + 1} is already in use, trying next session...")
+                    try:
+                        await temp_client.disconnect()
+                    except Exception:
+                        pass
+                    continue
+                except Exception as e:
+                    # Other error with this session, try next one
+                    logger.warning(f"Error connecting with session {idx + 1}: {e}. Trying next session...")
+                    try:
+                        await temp_client.disconnect()
+                    except Exception:
+                        pass
+                    continue
+            
+            if client is None:
+                # All sessions failed
+                error_msg = (
+                    f"Failed to connect with any of the {len(SESSION_STRINGS)} configured sessions. "
+                    "All sessions are either already in use or invalid. "
+                    "Please generate additional session strings using session_string_generator.py "
+                    "and add them to your .env file as TELEGRAM_SESSION_STRING_2, TELEGRAM_SESSION_STRING_3, etc."
+                )
+                logger.error(error_msg)
+                raise RuntimeError(error_msg)
+        else:
+            # Fall back to file-based session
+            logger.info("No session strings found, using file-based session...")
+            client = TelegramClient(TELEGRAM_SESSION_NAME, TELEGRAM_API_ID, TELEGRAM_API_HASH)
+            try:
+                await client.start()
+            except Exception as e:
+                logger.error(f"Error starting client with file-based session: {e}")
+                raise
+        
+        try:
+            logger.info("Telegram client started. Running MCP server...")
             # Use the asynchronous entrypoint instead of mcp.run()
             await mcp.run_stdio_async()
         except Exception as e:
-            print(f"Error starting client: {e}", file=sys.stderr)
+            logger.error(f"Error running MCP server: {e}")
             if isinstance(e, sqlite3.OperationalError) and "database is locked" in str(e):
-                print(
-                    "Database lock detected. Please ensure no other instances are running.",
-                    file=sys.stderr,
+                logger.error(
+                    "Database lock detected. Please ensure no other instances are running."
                 )
-            sys.exit(1)
+            raise
+        finally:
+            # Disconnect client and release lock on exit
+            if client:
+                try:
+                    await client.disconnect()
+                except Exception:
+                    pass
+            if lock_file and lock_acquired:
+                try:
+                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+                    lock_file.close()
+                    if os.path.exists(lock_file_path):
+                        os.remove(lock_file_path)
+                except Exception:
+                    pass
 
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except SystemExit:
+        # Release lock on system exit (if we acquired it)
+        if lock_file and lock_acquired:
+            try:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+                lock_file.close()
+                if os.path.exists(lock_file_path):
+                    os.remove(lock_file_path)
+            except Exception:
+                pass
+        raise

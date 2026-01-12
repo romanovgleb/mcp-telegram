@@ -197,6 +197,9 @@ mcp_errors.log
 telegram_test.log
 test_issues_report.md
 
+# Lock files
+.telegram_mcp.lock
+
 # Temporary data files
 test_upload.txt
 test_voice.ogg

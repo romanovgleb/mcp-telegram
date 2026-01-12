@@ -1,5 +1,8 @@
 # Telegram MCP Server
 
+> **Fork of [chigwell/telegram-mcp](https://github.com/chigwell/telegram-mcp)**  
+> This fork adds support for multiple Telegram sessions to enable simultaneous use in multiple Cursor windows.
+
 ![MCP Badge](https://badge.mcpx.dev)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-green?style=flat-square)](https://opensource.org/licenses/Apache-2.0)
 [![Python Lint & Format Check](https://github.com/chigwell/telegram-mcp/actions/workflows/python-lint-format.yml/badge.svg)](https://github.com/chigwell/telegram-mcp/actions/workflows/python-lint-format.yml)
@@ -159,23 +162,39 @@ cd telegram-mcp
 uv sync
 ```
 
-### 3. Generate a Session String
+### 3. Generate Session String(s)
 
 ```bash
 uv run session_string_generator.py
 ```
 Follow the prompts to authenticate and update your `.env` file.
 
+**For multiple Cursor windows:** Run the generator multiple times. It will automatically suggest adding sessions as `TELEGRAM_SESSION_STRING_2`, `TELEGRAM_SESSION_STRING_3`, etc.
+
 ### 4. Configure .env
 
 Copy `.env.example` to `.env` and fill in your values:
 
+**Basic configuration (single window):**
 ```
 TELEGRAM_API_ID=your_api_id_here
 TELEGRAM_API_HASH=your_api_hash_here
 TELEGRAM_SESSION_NAME=anon
 TELEGRAM_SESSION_STRING=your_session_string_here
 ```
+
+**Multiple sessions (for multiple Cursor windows):**
+```
+TELEGRAM_API_ID=your_api_id_here
+TELEGRAM_API_HASH=your_api_hash_here
+TELEGRAM_SESSION_NAME=anon
+TELEGRAM_SESSION_STRING=your_first_session_string_here
+TELEGRAM_SESSION_STRING_2=your_second_session_string_here
+TELEGRAM_SESSION_STRING_3=your_third_session_string_here
+```
+
+The server will automatically try each session in order until it finds one that's available. This allows you to use Telegram MCP in multiple Cursor windows simultaneously without conflicts.
+
 Get your API credentials at [my.telegram.org/apps](https://my.telegram.org/apps).
 
 ---
@@ -593,11 +612,12 @@ This project is licensed under the [Apache 2.0 License](LICENSE).
 - [Telethon](https://github.com/LonamiWebs/Telethon)
 - [Model Context Protocol](https://modelcontextprotocol.io/)
 - [Claude](https://www.anthropic.com/) and [Cursor](https://cursor.so/)
-- [chigwell/telegram-mcp](https://github.com/chigwell/telegram-mcp) (upstream)
+- [chigwell/telegram-mcp](https://github.com/chigwell/telegram-mcp) - Original project (upstream)
 
 ---
 
-**Maintained by [@chigwell](https://github.com/chigwell) and [@l1v0n1](https://github.com/l1v0n1). PRs welcome!**
+**Original project maintained by [@chigwell](https://github.com/chigwell) and [@l1v0n1](https://github.com/l1v0n1).**  
+**This fork maintained by [@romanovgleb](https://github.com/romanovgleb).**
 
 ## Star History
 
