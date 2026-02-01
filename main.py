@@ -519,7 +519,7 @@ async def send_message(chat_id: Union[int, str], message: str) -> str:
         return log_and_format_error("send_message", e, chat_id=chat_id)
 
 
-@mcp.tool()
+# @mcp.tool()
 async def list_contacts() -> str:
     """
     List all contacts in your Telegram account.
@@ -545,7 +545,7 @@ async def list_contacts() -> str:
         return log_and_format_error("list_contacts", e)
 
 
-@mcp.tool()
+# @mcp.tool()
 async def search_contacts(query: str) -> str:
     """
     Search for contacts by name, username, or phone number using Telethon's SearchRequest.
@@ -798,16 +798,24 @@ async def list_topics(
 
 
 @mcp.tool()
-async def list_chats(chat_type: str = None, limit: int = 20) -> str:
+async def list_chats(
+    chat_type: str = None,
+    limit: int = 20,
+    search_query: str = None,
+) -> str:
     """
-    List available chats with metadata.
+    List available chats with metadata. Use search_query to find a chat by name or username.
 
     Args:
         chat_type: Filter by chat type ('user', 'group', 'channel', or None for all)
-        limit: Maximum number of chats to retrieve.
+        limit: Maximum number of chats to retrieve. When search_query is set, scans up to 500 dialogs.
+        search_query: Space-separated keywords. Matches if ANY keyword appears in name/username.
     """
     try:
-        dialogs = await client.get_dialogs(limit=limit)
+        # When searching, scan more dialogs to improve match chance
+        fetch_limit = 500 if search_query else limit
+        dialogs = await client.get_dialogs(limit=fetch_limit)
+        search_lower = search_query.lower().strip() if search_query else None
 
         results = []
         for dialog in dialogs:
@@ -827,6 +835,25 @@ async def list_chats(chat_type: str = None, limit: int = 20) -> str:
 
             if chat_type and current_type != chat_type.lower():
                 continue
+
+            # Filter by search query (name or username). Split into words for fuzzy match:
+            # "grivtsov vanya" matches if any word matches any field (e.g. "grivtsov" in username).
+            if search_lower:
+                words = [w for w in search_lower.split() if len(w) >= 2]
+                if not words:
+                    words = search_lower.split()  # allow single-char if that's all they typed
+                searchable = []
+                if hasattr(entity, "title") and entity.title:
+                    searchable.append(entity.title.lower())
+                if hasattr(entity, "first_name") and entity.first_name:
+                    searchable.append(entity.first_name.lower())
+                if hasattr(entity, "last_name") and entity.last_name:
+                    searchable.append(entity.last_name.lower())
+                if hasattr(entity, "username") and entity.username:
+                    searchable.append(entity.username.lower())
+                combined = " ".join(searchable)
+                if not any(word in combined for word in words):
+                    continue
 
             # Format chat info
             chat_info = f"Chat ID: {entity.id}"
@@ -853,9 +880,12 @@ async def list_chats(chat_type: str = None, limit: int = 20) -> str:
         if not results:
             return f"No chats found matching the criteria."
 
-        return "\n".join(results)
+        # When searching, limit caps the number of matches returned (we always fetch 500)
+        return "\n".join(results[:limit])
     except Exception as e:
-        return log_and_format_error("list_chats", e, chat_type=chat_type, limit=limit)
+        return log_and_format_error(
+            "list_chats", e, chat_type=chat_type, limit=limit, search_query=search_query
+        )
 
 
 @mcp.tool()
@@ -939,7 +969,7 @@ async def get_chat(chat_id: Union[int, str]) -> str:
         return log_and_format_error("get_chat", e, chat_id=chat_id)
 
 
-@mcp.tool()
+# @mcp.tool()
 async def get_direct_chat_by_contact(contact_query: str) -> str:
     """
     Find a direct chat with a specific contact by name, username, or phone.
@@ -1047,8 +1077,8 @@ async def get_contact_chats(contact_id: Union[int, str]) -> str:
         return log_and_format_error("get_contact_chats", e, contact_id=contact_id)
 
 
-@mcp.tool()
-@validate_id("contact_id")
+# @mcp.tool()
+# @validate_id("contact_id")
 async def get_last_interaction(contact_id: Union[int, str]) -> str:
     """
     Get the most recent message with a contact.
@@ -1151,7 +1181,7 @@ async def get_message_context(
         )
 
 
-@mcp.tool()
+# @mcp.tool()
 async def add_contact(phone: str, first_name: str, last_name: str = "") -> str:
     """
     Add a new contact to your Telegram account.
@@ -1207,8 +1237,8 @@ async def add_contact(phone: str, first_name: str, last_name: str = "") -> str:
         return log_and_format_error("add_contact", e, phone=phone)
 
 
-@mcp.tool()
-@validate_id("user_id")
+# @mcp.tool()
+# @validate_id("user_id")
 async def delete_contact(user_id: Union[int, str]) -> str:
     """
     Delete a contact by user ID.
@@ -1223,8 +1253,8 @@ async def delete_contact(user_id: Union[int, str]) -> str:
         return log_and_format_error("delete_contact", e, user_id=user_id)
 
 
-@mcp.tool()
-@validate_id("user_id")
+# @mcp.tool()
+# @validate_id("user_id")
 async def block_user(user_id: Union[int, str]) -> str:
     """
     Block a user by user ID.
@@ -1239,8 +1269,8 @@ async def block_user(user_id: Union[int, str]) -> str:
         return log_and_format_error("block_user", e, user_id=user_id)
 
 
-@mcp.tool()
-@validate_id("user_id")
+# @mcp.tool()
+# @validate_id("user_id")
 async def unblock_user(user_id: Union[int, str]) -> str:
     """
     Unblock a user by user ID.
@@ -1255,7 +1285,7 @@ async def unblock_user(user_id: Union[int, str]) -> str:
         return log_and_format_error("unblock_user", e, user_id=user_id)
 
 
-@mcp.tool()
+# @mcp.tool()
 async def get_me() -> str:
     """
     Get your own user information.
@@ -1267,8 +1297,8 @@ async def get_me() -> str:
         return log_and_format_error("get_me", e)
 
 
-@mcp.tool()
-@validate_id("user_ids")
+# @mcp.tool()
+# @validate_id("user_ids")
 async def create_group(title: str, user_ids: List[Union[int, str]]) -> str:
     """
     Create a new group or supergroup and add users.
@@ -1326,8 +1356,8 @@ async def create_group(title: str, user_ids: List[Union[int, str]]) -> str:
         return log_and_format_error("create_group", e, title=title, user_ids=user_ids)
 
 
-@mcp.tool()
-@validate_id("group_id", "user_ids")
+# @mcp.tool()
+# @validate_id("group_id", "user_ids")
 async def invite_to_group(group_id: Union[int, str], user_ids: List[Union[int, str]]) -> str:
     """
     Invite users to a group or channel.
@@ -1376,8 +1406,8 @@ async def invite_to_group(group_id: Union[int, str], user_ids: List[Union[int, s
         return log_and_format_error("invite_to_group", e, group_id=group_id, user_ids=user_ids)
 
 
-@mcp.tool()
-@validate_id("chat_id")
+# @mcp.tool()
+# @validate_id("chat_id")
 async def leave_chat(chat_id: Union[int, str]) -> str:
     """
     Leave a group or channel by chat ID.
@@ -1533,7 +1563,7 @@ async def download_media(chat_id: Union[int, str], message_id: int, file_path: s
         )
 
 
-@mcp.tool()
+# @mcp.tool()
 async def update_profile(first_name: str = None, last_name: str = None, about: str = None) -> str:
     """
     Update your profile information (name, bio).
@@ -1551,7 +1581,7 @@ async def update_profile(first_name: str = None, last_name: str = None, about: s
         )
 
 
-@mcp.tool()
+# @mcp.tool()
 async def set_profile_photo(file_path: str) -> str:
     """
     Set a new profile photo.
@@ -1565,7 +1595,7 @@ async def set_profile_photo(file_path: str) -> str:
         return log_and_format_error("set_profile_photo", e, file_path=file_path)
 
 
-@mcp.tool()
+# @mcp.tool()
 async def delete_profile_photo() -> str:
     """
     Delete your current profile photo.
@@ -1582,7 +1612,7 @@ async def delete_profile_photo() -> str:
         return log_and_format_error("delete_profile_photo", e)
 
 
-@mcp.tool()
+# @mcp.tool()
 async def get_privacy_settings() -> str:
     """
     Get your privacy settings for last seen status.
@@ -1606,8 +1636,8 @@ async def get_privacy_settings() -> str:
         return log_and_format_error("get_privacy_settings", e)
 
 
-@mcp.tool()
-@validate_id("allow_users", "disallow_users")
+# @mcp.tool()
+# @validate_id("allow_users", "disallow_users")
 async def set_privacy_settings(
     key: str,
     allow_users: Optional[List[Union[int, str]]] = None,
@@ -1703,7 +1733,7 @@ async def set_privacy_settings(
         return log_and_format_error("set_privacy_settings", e, key=key)
 
 
-@mcp.tool()
+# @mcp.tool()
 async def import_contacts(contacts: list) -> str:
     """
     Import a list of contacts. Each contact should be a dict with phone, first_name, last_name.
@@ -1724,7 +1754,7 @@ async def import_contacts(contacts: list) -> str:
         return log_and_format_error("import_contacts", e, contacts=contacts)
 
 
-@mcp.tool()
+# @mcp.tool()
 async def export_contacts() -> str:
     """
     Export all contacts as a JSON string.
@@ -1737,7 +1767,7 @@ async def export_contacts() -> str:
         return log_and_format_error("export_contacts", e)
 
 
-@mcp.tool()
+# @mcp.tool()
 async def get_blocked_users() -> str:
     """
     Get a list of blocked users.
@@ -1749,7 +1779,7 @@ async def get_blocked_users() -> str:
         return log_and_format_error("get_blocked_users", e)
 
 
-@mcp.tool()
+# @mcp.tool()
 async def create_channel(title: str, about: str = "", megagroup: bool = False) -> str:
     """
     Create a new channel or supergroup.
@@ -1765,8 +1795,8 @@ async def create_channel(title: str, about: str = "", megagroup: bool = False) -
         )
 
 
-@mcp.tool()
-@validate_id("chat_id")
+# @mcp.tool()
+# @validate_id("chat_id")
 async def edit_chat_title(chat_id: Union[int, str], title: str) -> str:
     """
     Edit the title of a chat, group, or channel.
@@ -1785,8 +1815,8 @@ async def edit_chat_title(chat_id: Union[int, str], title: str) -> str:
         return log_and_format_error("edit_chat_title", e, chat_id=chat_id, title=title)
 
 
-@mcp.tool()
-@validate_id("chat_id")
+# @mcp.tool()
+# @validate_id("chat_id")
 async def edit_chat_photo(chat_id: Union[int, str], file_path: str) -> str:
     """
     Edit the photo of a chat, group, or channel. Requires a file path to an image.
@@ -1819,8 +1849,8 @@ async def edit_chat_photo(chat_id: Union[int, str], file_path: str) -> str:
         return log_and_format_error("edit_chat_photo", e, chat_id=chat_id, file_path=file_path)
 
 
-@mcp.tool()
-@validate_id("chat_id")
+# @mcp.tool()
+# @validate_id("chat_id")
 async def delete_chat_photo(chat_id: Union[int, str]) -> str:
     """
     Delete the photo of a chat, group, or channel.
@@ -1848,8 +1878,8 @@ async def delete_chat_photo(chat_id: Union[int, str]) -> str:
         return log_and_format_error("delete_chat_photo", e, chat_id=chat_id)
 
 
-@mcp.tool()
-@validate_id("group_id", "user_id")
+# @mcp.tool()
+# @validate_id("group_id", "user_id")
 async def promote_admin(
     group_id: Union[int, str], user_id: Union[int, str], rights: dict = None
 ) -> str:
@@ -1915,8 +1945,8 @@ async def promote_admin(
         return log_and_format_error("promote_admin", e, group_id=group_id, user_id=user_id)
 
 
-@mcp.tool()
-@validate_id("group_id", "user_id")
+# @mcp.tool()
+# @validate_id("group_id", "user_id")
 async def demote_admin(group_id: Union[int, str], user_id: Union[int, str]) -> str:
     """
     Demote a user from admin in a group/channel.
@@ -1964,8 +1994,8 @@ async def demote_admin(group_id: Union[int, str], user_id: Union[int, str]) -> s
         return log_and_format_error("demote_admin", e, group_id=group_id, user_id=user_id)
 
 
-@mcp.tool()
-@validate_id("chat_id", "user_id")
+# @mcp.tool()
+# @validate_id("chat_id", "user_id")
 async def ban_user(chat_id: Union[int, str], user_id: Union[int, str]) -> str:
     """
     Ban a user from a group or channel.
@@ -2011,8 +2041,8 @@ async def ban_user(chat_id: Union[int, str], user_id: Union[int, str]) -> str:
         return log_and_format_error("ban_user", e, chat_id=chat_id, user_id=user_id)
 
 
-@mcp.tool()
-@validate_id("chat_id", "user_id")
+# @mcp.tool()
+# @validate_id("chat_id", "user_id")
 async def unban_user(chat_id: Union[int, str], user_id: Union[int, str]) -> str:
     """
     Unban a user from a group or channel.
@@ -2058,8 +2088,8 @@ async def unban_user(chat_id: Union[int, str], user_id: Union[int, str]) -> str:
         return log_and_format_error("unban_user", e, chat_id=chat_id, user_id=user_id)
 
 
-@mcp.tool()
-@validate_id("chat_id")
+# @mcp.tool()
+# @validate_id("chat_id")
 async def get_admins(chat_id: Union[int, str]) -> str:
     """
     Get all admins in a group or channel.
@@ -2077,8 +2107,8 @@ async def get_admins(chat_id: Union[int, str]) -> str:
         return log_and_format_error("get_admins", e, chat_id=chat_id)
 
 
-@mcp.tool()
-@validate_id("chat_id")
+# @mcp.tool()
+# @validate_id("chat_id")
 async def get_banned_users(chat_id: Union[int, str]) -> str:
     """
     Get all banned users in a group or channel.
@@ -2098,8 +2128,8 @@ async def get_banned_users(chat_id: Union[int, str]) -> str:
         return log_and_format_error("get_banned_users", e, chat_id=chat_id)
 
 
-@mcp.tool()
-@validate_id("chat_id")
+# @mcp.tool()
+# @validate_id("chat_id")
 async def get_invite_link(chat_id: Union[int, str]) -> str:
     """
     Get the invite link for a group or channel.
@@ -2142,7 +2172,7 @@ async def get_invite_link(chat_id: Union[int, str]) -> str:
         return log_and_format_error("get_invite_link", e, chat_id=chat_id)
 
 
-@mcp.tool()
+# @mcp.tool()
 async def join_chat_by_link(link: str) -> str:
     """
     Join a chat by invite link.
@@ -2186,8 +2216,8 @@ async def join_chat_by_link(link: str) -> str:
         return f"Error joining chat: {e}"
 
 
-@mcp.tool()
-@validate_id("chat_id")
+# @mcp.tool()
+# @validate_id("chat_id")
 async def export_chat_invite(chat_id: Union[int, str]) -> str:
     """
     Export a chat invite link.
@@ -2221,7 +2251,7 @@ async def export_chat_invite(chat_id: Union[int, str]) -> str:
         return log_and_format_error("export_chat_invite", e, chat_id=chat_id)
 
 
-@mcp.tool()
+# @mcp.tool()
 async def import_chat_invite(hash: str) -> str:
     """
     Import a chat invite by hash.
@@ -2423,8 +2453,8 @@ async def reply_to_message(chat_id: Union[int, str], message_id: int, text: str)
         )
 
 
-@mcp.tool()
-@validate_id("chat_id")
+# @mcp.tool()
+# @validate_id("chat_id")
 async def get_media_info(chat_id: Union[int, str], message_id: int) -> str:
     """
     Get info about media in a message.
@@ -2445,7 +2475,7 @@ async def get_media_info(chat_id: Union[int, str], message_id: int) -> str:
         return log_and_format_error("get_media_info", e, chat_id=chat_id, message_id=message_id)
 
 
-@mcp.tool()
+# @mcp.tool()
 async def search_public_chats(query: str) -> str:
     """
     Search for public chats, channels, or bots by username or title.
@@ -2495,8 +2525,8 @@ async def resolve_username(username: str) -> str:
         return log_and_format_error("resolve_username", e, username=username)
 
 
-@mcp.tool()
-@validate_id("chat_id")
+# @mcp.tool()
+# @validate_id("chat_id")
 async def mute_chat(chat_id: Union[int, str]) -> str:
     """
     Mute notifications for a chat.
@@ -2534,8 +2564,8 @@ async def mute_chat(chat_id: Union[int, str]) -> str:
         return log_and_format_error("mute_chat", e, chat_id=chat_id)
 
 
-@mcp.tool()
-@validate_id("chat_id")
+# @mcp.tool()
+# @validate_id("chat_id")
 async def unmute_chat(chat_id: Union[int, str]) -> str:
     """
     Unmute notifications for a chat.
@@ -2573,8 +2603,8 @@ async def unmute_chat(chat_id: Union[int, str]) -> str:
         return log_and_format_error("unmute_chat", e, chat_id=chat_id)
 
 
-@mcp.tool()
-@validate_id("chat_id")
+# @mcp.tool()
+# @validate_id("chat_id")
 async def archive_chat(chat_id: Union[int, str]) -> str:
     """
     Archive a chat.
@@ -2590,8 +2620,8 @@ async def archive_chat(chat_id: Union[int, str]) -> str:
         return log_and_format_error("archive_chat", e, chat_id=chat_id)
 
 
-@mcp.tool()
-@validate_id("chat_id")
+# @mcp.tool()
+# @validate_id("chat_id")
 async def unarchive_chat(chat_id: Union[int, str]) -> str:
     """
     Unarchive a chat.
@@ -2607,7 +2637,7 @@ async def unarchive_chat(chat_id: Union[int, str]) -> str:
         return log_and_format_error("unarchive_chat", e, chat_id=chat_id)
 
 
-@mcp.tool()
+# @mcp.tool()
 async def get_sticker_sets() -> str:
     """
     Get all sticker sets.
@@ -2619,8 +2649,8 @@ async def get_sticker_sets() -> str:
         return log_and_format_error("get_sticker_sets", e)
 
 
-@mcp.tool()
-@validate_id("chat_id")
+# @mcp.tool()
+# @validate_id("chat_id")
 async def send_sticker(chat_id: Union[int, str], file_path: str) -> str:
     """
     Send a sticker to a chat. File must be a valid .webp sticker file.
@@ -2644,7 +2674,7 @@ async def send_sticker(chat_id: Union[int, str], file_path: str) -> str:
         return log_and_format_error("send_sticker", e, chat_id=chat_id, file_path=file_path)
 
 
-@mcp.tool()
+# @mcp.tool()
 async def get_gif_search(query: str, limit: int = 10) -> str:
     """
     Search for GIFs by query. Returns a list of Telegram document IDs (not file paths).
@@ -2700,8 +2730,8 @@ async def get_gif_search(query: str, limit: int = 10) -> str:
         return log_and_format_error("get_gif_search", e, query=query, limit=limit)
 
 
-@mcp.tool()
-@validate_id("chat_id")
+# @mcp.tool()
+# @validate_id("chat_id")
 async def send_gif(chat_id: Union[int, str], gif_id: int) -> str:
     """
     Send a GIF to a chat by Telegram GIF document ID (not a file path).
@@ -2720,7 +2750,7 @@ async def send_gif(chat_id: Union[int, str], gif_id: int) -> str:
         return log_and_format_error("send_gif", e, chat_id=chat_id, gif_id=gif_id)
 
 
-@mcp.tool()
+# @mcp.tool()
 async def get_bot_info(bot_username: str) -> str:
     """
     Get information about a bot by username.
@@ -2756,7 +2786,7 @@ async def get_bot_info(bot_username: str) -> str:
         return log_and_format_error("get_bot_info", e, bot_username=bot_username)
 
 
-@mcp.tool()
+# @mcp.tool()
 async def set_bot_commands(bot_username: str, commands: list) -> str:
     """
     Set bot commands for a bot you own.
@@ -2803,8 +2833,8 @@ async def set_bot_commands(bot_username: str, commands: list) -> str:
         return log_and_format_error("set_bot_commands", e, bot_username=bot_username)
 
 
-@mcp.tool()
-@validate_id("chat_id")
+# @mcp.tool()
+# @validate_id("chat_id")
 async def get_history(chat_id: Union[int, str], limit: int = 100) -> str:
     """
     Get full chat history (up to limit).
@@ -2827,8 +2857,8 @@ async def get_history(chat_id: Union[int, str], limit: int = 100) -> str:
         return log_and_format_error("get_history", e, chat_id=chat_id, limit=limit)
 
 
-@mcp.tool()
-@validate_id("user_id")
+# @mcp.tool()
+# @validate_id("user_id")
 async def get_user_photos(user_id: Union[int, str], limit: int = 10) -> str:
     """
     Get profile photos of a user.
@@ -2843,8 +2873,8 @@ async def get_user_photos(user_id: Union[int, str], limit: int = 10) -> str:
         return log_and_format_error("get_user_photos", e, user_id=user_id, limit=limit)
 
 
-@mcp.tool()
-@validate_id("user_id")
+# @mcp.tool()
+# @validate_id("user_id")
 async def get_user_status(user_id: Union[int, str]) -> str:
     """
     Get the online status of a user.
@@ -2856,8 +2886,8 @@ async def get_user_status(user_id: Union[int, str]) -> str:
         return log_and_format_error("get_user_status", e, user_id=user_id)
 
 
-@mcp.tool()
-@validate_id("chat_id")
+# @mcp.tool()
+# @validate_id("chat_id")
 async def get_recent_actions(chat_id: Union[int, str]) -> str:
     """
     Get recent admin actions (admin log) in a group or channel.
@@ -2924,7 +2954,7 @@ async def get_pinned_messages(chat_id: Union[int, str]) -> str:
         return log_and_format_error("get_pinned_messages", e, chat_id=chat_id)
 
 
-@mcp.tool()
+# @mcp.tool()
 async def create_poll(
     chat_id: int,
     question: str,
