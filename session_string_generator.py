@@ -62,7 +62,7 @@ try:
         print("\nAuthentication successful!")
         print("\n----- Your Session String -----")
         print(f"\n{session_string}\n")
-        
+
         # Determine the session variable name
         session_var_name = "TELEGRAM_SESSION_STRING"
         try:
@@ -70,7 +70,7 @@ try:
             if os.path.exists(".env"):
                 with open(".env", "r") as file:
                     env_contents = file.readlines()
-                
+
                 # Find the highest session number
                 max_session_num = 0
                 for line in env_contents:
@@ -82,17 +82,19 @@ try:
                             max_session_num = max(max_session_num, num)
                         except (ValueError, IndexError):
                             pass
-                
+
                 # If base session exists, use next number
                 if max_session_num > 0:
                     session_var_name = f"TELEGRAM_SESSION_STRING_{max_session_num + 1}"
         except Exception:
             pass  # Fall back to base session name
-        
+
         print("Add this to your .env file as:")
         print(f"{session_var_name}={session_string}")
         print("\nIMPORTANT: Keep this string private and never share it with anyone!")
-        print("\nNote: Multiple session strings allow you to use Telegram MCP in multiple Cursor windows simultaneously.")
+        print(
+            "\nNote: Multiple session strings allow you to use Telegram MCP in multiple Cursor windows simultaneously."
+        )
 
         # Optional: auto-update the .env file
         choice = input(
@@ -105,7 +107,7 @@ try:
                 if os.path.exists(".env"):
                     with open(".env", "r") as file:
                         env_contents = file.readlines()
-                
+
                 # Check if this session variable already exists
                 session_string_line_found = False
                 for i, line in enumerate(env_contents):

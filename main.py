@@ -348,15 +348,18 @@ async def schedule_message(chat_id: Union[int, str], text: str, schedule_iso: st
         try:
             schedule_dt = datetime.fromisoformat(schedule_iso.replace("Z", "+00:00"))
         except ValueError:
-            return (
-                "Invalid schedule_iso format. Use ISO 8601, e.g. 2025-10-28T09:55:00+03:00"
-            )
+            return "Invalid schedule_iso format. Use ISO 8601, e.g. 2025-10-28T09:55:00+03:00"
 
         # Telethon will schedule the message server-side
         msg = await client.send_message(entity, text, schedule=schedule_dt)
-        return json.dumps({"status": "scheduled", "id": msg.id, "date": msg.date.isoformat()}, default=json_serializer)
+        return json.dumps(
+            {"status": "scheduled", "id": msg.id, "date": msg.date.isoformat()},
+            default=json_serializer,
+        )
     except Exception as e:
-        return log_and_format_error("schedule_message", e, chat_id=chat_id, schedule_iso=schedule_iso)
+        return log_and_format_error(
+            "schedule_message", e, chat_id=chat_id, schedule_iso=schedule_iso
+        )
 
 
 @mcp.tool()
@@ -387,9 +390,10 @@ async def list_scheduled_messages(chat_id: Union[int, str]) -> str:
                         break
             if entity is None:
                 return f"Chat '{chat_id}' not found."
-        
+
         # Use low-level API which returns all scheduled messages reliably
         from telethon.tl.types import InputPeerSelf
+
         use_self = False
         if isinstance(chat_id, str) and chat_id.lower() in ("me", "self"):
             use_self = True
@@ -398,7 +402,15 @@ async def list_scheduled_messages(chat_id: Union[int, str]) -> str:
 
         peer = InputPeerSelf() if use_self else entity
 
-        logger.info("list_scheduled_messages: fetching", extra={"chat_id": chat_id, "entity_id": getattr(entity, "id", None), "entity_class": type(entity).__name__, "use_self": use_self})
+        logger.info(
+            "list_scheduled_messages: fetching",
+            extra={
+                "chat_id": chat_id,
+                "entity_id": getattr(entity, "id", None),
+                "entity_class": type(entity).__name__,
+                "use_self": use_self,
+            },
+        )
 
         result = await client(functions.messages.GetScheduledHistoryRequest(peer=peer, hash=0))
         msgs = getattr(result, "messages", []) or []
@@ -436,13 +448,15 @@ async def cancel_scheduled_message(chat_id: Union[int, str], message_id: int) ->
     """
     try:
         entity = await client.get_entity(chat_id)
-        await client(functions.messages.DeleteScheduledMessagesRequest(peer=entity, id=[message_id]))
+        await client(
+            functions.messages.DeleteScheduledMessagesRequest(peer=entity, id=[message_id])
+        )
         return "Scheduled message cancelled."
     except Exception as e:
-        return log_and_format_error("cancel_scheduled_message", e, chat_id=chat_id, message_id=message_id)
+        return log_and_format_error(
+            "cancel_scheduled_message", e, chat_id=chat_id, message_id=message_id
+        )
 
-
- 
 
 @mcp.tool()
 async def get_chats(page: int = 1, page_size: int = 20) -> str:
@@ -3064,13 +3078,15 @@ if __name__ == "__main__":
         global client
         client = None
         used_session_index = None
-        
+
         # Try to connect using available sessions
         if SESSION_STRINGS:
             # Try each session string until we find one that works
             for idx, session_string in enumerate(SESSION_STRINGS):
                 try:
-                    logger.info(f"Trying to connect with session {idx + 1}/{len(SESSION_STRINGS)}...")
+                    logger.info(
+                        f"Trying to connect with session {idx + 1}/{len(SESSION_STRINGS)}..."
+                    )
                     temp_client = TelegramClient(
                         StringSession(session_string), TELEGRAM_API_ID, TELEGRAM_API_HASH
                     )
@@ -3090,13 +3106,15 @@ if __name__ == "__main__":
                     continue
                 except Exception as e:
                     # Other error with this session, try next one
-                    logger.warning(f"Error connecting with session {idx + 1}: {e}. Trying next session...")
+                    logger.warning(
+                        f"Error connecting with session {idx + 1}: {e}. Trying next session..."
+                    )
                     try:
                         await temp_client.disconnect()
                     except Exception:
                         pass
                     continue
-            
+
             if client is None:
                 # All sessions failed
                 error_msg = (
@@ -3116,7 +3134,7 @@ if __name__ == "__main__":
             except Exception as e:
                 logger.error(f"Error starting client with file-based session: {e}")
                 raise
-        
+
         try:
             logger.info("Telegram client started. Running MCP server...")
             # Use the asynchronous entrypoint instead of mcp.run()
