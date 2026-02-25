@@ -3,16 +3,13 @@ import sys
 import json
 import time
 import asyncio
-import sqlite3
 import logging
 import mimetypes
-import fcntl
 from datetime import datetime, timedelta
 from enum import Enum
 from typing import List, Dict, Optional, Union, Any
 
 # Third-party libraries
-import nest_asyncio
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
 from pythonjsonlogger import jsonlogger
@@ -36,6 +33,25 @@ from telethon.tl.types import (
 import re
 from functools import wraps
 import telethon.errors.rpcerrorlist
+
+# Cyrillic → Latin for search: when user types "минигео", also match chat names like "minigeo"
+_CYRILLIC_TO_LATIN = str.maketrans(
+    "абвгдеёжзийклмнопрстуфхцчшщъыьэюя",
+    "abvgdeezhiyklmnoprstufhcss_y_euya",
+)
+_CYRILLIC_TO_LATIN.update(str.maketrans(
+    "АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ",
+    "ABVGDEEZHIYKLMNOPRSTUFHCSS_Y_EUYA",
+))
+
+
+def _transliterate_ru_to_latin(text: str) -> str:
+    """Transliterate Russian Cyrillic to Latin for search (e.g. минигео → minigeo)."""
+    return text.translate(_CYRILLIC_TO_LATIN)
+
+
+def _has_cyrillic(s: str) -> bool:
+    return any("\u0400" <= c <= "\u04FF" for c in s)
 
 
 class ValidationError(Exception):
@@ -157,6 +173,12 @@ def log_and_format_error(
     Returns:
         A user-friendly error message with an error code.
     """
+    # If Telegram disconnected us (e.g. after AuthKeyDuplicatedError), exit so we release
+    # the session and lock; Cursor can start a fresh MCP.
+    if isinstance(error, ConnectionError) and "disconnected" in str(error).lower():
+        logger.error("Telegram client disconnected (session likely taken elsewhere). Exiting so session and lock are released.")
+        os._exit(0)
+
     # Generate a consistent error code
     if isinstance(prefix, str) and prefix == "VALIDATION-001":
         # Special case for validation errors
@@ -852,10 +874,16 @@ async def list_chats(
 
             # Filter by search query (name or username). Split into words for fuzzy match:
             # "grivtsov vanya" matches if any word matches any field (e.g. "grivtsov" in username).
+            # When query is in Cyrillic (e.g. "минигео"), also match Latin chat names ("minigeo").
             if search_lower:
                 words = [w for w in search_lower.split() if len(w) >= 2]
                 if not words:
                     words = search_lower.split()  # allow single-char if that's all they typed
+                search_terms = []
+                for w in words:
+                    search_terms.append(w)
+                    if _has_cyrillic(w):
+                        search_terms.append(_transliterate_ru_to_latin(w))
                 searchable = []
                 if hasattr(entity, "title") and entity.title:
                     searchable.append(entity.title.lower())
@@ -866,7 +894,7 @@ async def list_chats(
                 if hasattr(entity, "username") and entity.username:
                     searchable.append(entity.username.lower())
                 combined = " ".join(searchable)
-                if not any(word in combined for word in words):
+                if not any(term in combined for term in search_terms):
                     continue
 
             # Format chat info
@@ -3042,136 +3070,17 @@ async def create_poll(
 
 
 if __name__ == "__main__":
-    nest_asyncio.apply()
+    from run import run_telegram_mcp
 
-    # Try to acquire lock file to detect multiple instances (warning only, not blocking)
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    lock_file_path = os.path.join(script_dir, ".telegram_mcp.lock")
-    lock_file = None
-    lock_acquired = False
-
-    try:
-        # Try to acquire exclusive lock (non-blocking)
-        lock_file = open(lock_file_path, "w")
-        try:
-            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-            # Write PID to lock file
-            lock_file.write(str(os.getpid()))
-            lock_file.flush()
-            lock_acquired = True
-        except IOError:
-            # Lock is held by another process - warn but continue
-            lock_file.close()
-            lock_file = None
-            logger.warning(
-                "Another instance of Telegram MCP server may be running. "
-                "Multiple instances using the same Telegram session may cause AuthKeyDuplicatedError. "
-                "Consider using different sessions for different Cursor windows."
-            )
-    except Exception as lock_error:
-        if lock_file:
-            lock_file.close()
-            lock_file = None
-        logger.warning(f"Could not check for other instances: {lock_error}")
-
-    async def main() -> None:
+    def _set_client(c):
         global client
-        client = None
-        used_session_index = None
+        client = c
 
-        # Try to connect using available sessions
-        if SESSION_STRINGS:
-            # Try each session string until we find one that works
-            for idx, session_string in enumerate(SESSION_STRINGS):
-                try:
-                    logger.info(
-                        f"Trying to connect with session {idx + 1}/{len(SESSION_STRINGS)}..."
-                    )
-                    temp_client = TelegramClient(
-                        StringSession(session_string), TELEGRAM_API_ID, TELEGRAM_API_HASH
-                    )
-                    await temp_client.start()
-                    # If we got here, connection succeeded
-                    client = temp_client
-                    used_session_index = idx
-                    logger.info(f"Successfully connected using session {idx + 1}")
-                    break
-                except telethon.errors.rpcerrorlist.AuthKeyDuplicatedError:
-                    # This session is already in use, try next one
-                    logger.warning(f"Session {idx + 1} is already in use, trying next session...")
-                    try:
-                        await temp_client.disconnect()
-                    except Exception:
-                        pass
-                    continue
-                except Exception as e:
-                    # Other error with this session, try next one
-                    logger.warning(
-                        f"Error connecting with session {idx + 1}: {e}. Trying next session..."
-                    )
-                    try:
-                        await temp_client.disconnect()
-                    except Exception:
-                        pass
-                    continue
-
-            if client is None:
-                # All sessions failed
-                error_msg = (
-                    f"Failed to connect with any of the {len(SESSION_STRINGS)} configured sessions. "
-                    "All sessions are either already in use or invalid. "
-                    "Please generate additional session strings using session_string_generator.py "
-                    "and add them to your .env file as TELEGRAM_SESSION_STRING_2, TELEGRAM_SESSION_STRING_3, etc."
-                )
-                logger.error(error_msg)
-                raise RuntimeError(error_msg)
-        else:
-            # Fall back to file-based session
-            logger.info("No session strings found, using file-based session...")
-            client = TelegramClient(TELEGRAM_SESSION_NAME, TELEGRAM_API_ID, TELEGRAM_API_HASH)
-            try:
-                await client.start()
-            except Exception as e:
-                logger.error(f"Error starting client with file-based session: {e}")
-                raise
-
-        try:
-            logger.info("Telegram client started. Running MCP server...")
-            # Use the asynchronous entrypoint instead of mcp.run()
-            await mcp.run_stdio_async()
-        except Exception as e:
-            logger.error(f"Error running MCP server: {e}")
-            if isinstance(e, sqlite3.OperationalError) and "database is locked" in str(e):
-                logger.error(
-                    "Database lock detected. Please ensure no other instances are running."
-                )
-            raise
-        finally:
-            # Disconnect client and release lock on exit
-            if client:
-                try:
-                    await client.disconnect()
-                except Exception:
-                    pass
-            if lock_file and lock_acquired:
-                try:
-                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
-                    lock_file.close()
-                    if os.path.exists(lock_file_path):
-                        os.remove(lock_file_path)
-                except Exception:
-                    pass
-
-    try:
-        asyncio.run(main())
-    except SystemExit:
-        # Release lock on system exit (if we acquired it)
-        if lock_file and lock_acquired:
-            try:
-                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
-                lock_file.close()
-                if os.path.exists(lock_file_path):
-                    os.remove(lock_file_path)
-            except Exception:
-                pass
-        raise
+    run_telegram_mcp(
+        mcp,
+        SESSION_STRINGS,
+        TELEGRAM_API_ID,
+        TELEGRAM_API_HASH,
+        TELEGRAM_SESSION_NAME,
+        _set_client,
+    )
